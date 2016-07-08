@@ -30,11 +30,18 @@
 ; or are bound in the substitution
 (define unbound (list 'unbound))
 
+;(define var
+  ;(let ((counter -1))
+    ;(lambda (scope)
+      ;(set! counter (+ 1 counter))
+      ;(vector unbound scope counter 0))))
+
+(define counter -1)
+
 (define var
-  (let ((counter -1))
-    (lambda (scope)
-      (set! counter (+ 1 counter))
-      (vector unbound scope counter))))
+  (lambda (scope)
+    (set! counter (+ 1 counter))
+    (vector unbound scope counter 0)))
 
 ; Vectors are not allowed as terms, so terms that are vectors are variables.
 (define var?
@@ -59,6 +66,19 @@
   (lambda (x)
     (vector-ref x 2)))
 
+(define var-assignments
+  (lambda (x)
+    (vector-ref x 3)))
+
+(define var-assignments-add
+  (lambda (x)
+    (vector-set! x 3 (+ 1 (var-assignments x)))
+    (when (or #f (and (<= 3155 (var-idx x))  (<= (var-idx x) 3195)))
+      (set! max-assignments (max max-assignments (var-assignments x))))
+    ))
+
+(define max-assignments 0)
+
 
 ; Substitution object.
 ; Contains:
@@ -82,6 +102,10 @@
   (lambda (S)
     (subst-map-length (subst-map S))))
 
+(define subst-depth
+  (lambda (S)
+    (subst-map-depth (subst-map S))))
+
 (define subst-with-scope
   (lambda (S new-scope)
     (subst (subst-map S) new-scope)))
@@ -98,7 +122,13 @@
       (begin
         (set-var-val! x v)
         S)
-      (subst (subst-map-add (subst-map S) x v) (subst-scope S)))))
+      (begin
+    (var-assignments-add x)
+        (subst (subst-map-add (subst-map S) x v) (subst-scope S))))))
+
+(define fast-lookup-count 0)
+(define slow-lookup-count 0)
+(define slow-lookup-agg-count 0)
 
 (define subst-lookup
   (lambda (u S)
@@ -106,8 +136,10 @@
     ; Tried checking the scope here to avoid a subst-map-lookup
     ; if it was definitely unbound, but that was slower.
     (if (not (eq? (var-val u) unbound))
-      (var-val u)
-      (subst-map-lookup u (subst-map S)))))
+      (begin (set! fast-lookup-count (+ 1 fast-lookup-count)) (var-val u))
+      (begin (set! slow-lookup-count (+ 1 slow-lookup-count))
+       (set! slow-lookup-agg-count (+ (var-assignments u) slow-lookup-agg-count))
+       (subst-map-lookup u (subst-map S))))))
 
 ; Association object.
 ; Describes an association mapping the lhs to the rhs. Returned by unification
@@ -305,14 +337,17 @@
 (define-syntax run
   (syntax-rules ()
     ((_ n (q) g0 g ...)
-     (take n
+     (begin
+       (set! counter -1)
+       (set! max-assignments 0)
+       (take n
        (inc
          ((fresh (q) g0 g ...
             (lambdag@ (st)
               (let ((st (state-with-scope st nonlocal-scope)))
                 (let ((z ((reify q) st)))
                   (choice z empty-f)))))
-          empty-state))))
+          empty-state)))))
     ((_ n (q0 q1 q ...) g0 g ...)
      (run n (x) (fresh (q0 q1 q ...) g0 g ... (== `(,q0 ,q1 ,q ...) x))))))
 
@@ -447,13 +482,19 @@
     (let ([res (proc (car lst) init)])
       (and res (and-foldl proc res (cdr lst))))))
 
+(define max-count 0)
+(define max-depth 0)
+
 (define ==
   (lambda (u v)
     (lambdag@ (st)
       (let-values (((S added) (unify u v (state-S st))))
         (if S
           (and-foldl update-constraints (state S (state-C st)) added)
-          (mzero))))))
+          (begin
+            ;(set! max-count (max max-count (subst-length (state-S st))))
+            ;(set! max-depth (max max-depth (subst-depth (state-S st))))
+            (mzero)))))))
 
 
 ; Not fully optimized. Could do absento update with fewer hash-refs / hash-sets.
@@ -543,6 +584,10 @@
                  (Y (walk* (c->Y c) S))
                  (N (walk* (c->N c) S))
                  (T (walk* (c->T c) S)))
+            (display `(subst-count-depth: ,(subst-length S) ,(subst-depth S))) (newline)
+            (display `(max-subst-count-depth: ,max-count ,max-depth)) (newline)
+            (display `(max-assignments: ,max-assignments)) (newline)
+            (display `(lookups-fast-slow: ,fast-lookup-count ,slow-lookup-count ,slow-lookup-agg-count ,(/ (* 1.0 slow-lookup-agg-count) slow-lookup-count))) (newline)
             (let ((v (walk* x S)))
               (let ((R (reify-S v (subst empty-subst-map nonlocal-scope))))
                 (reify+ v R

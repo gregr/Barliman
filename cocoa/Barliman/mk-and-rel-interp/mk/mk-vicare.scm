@@ -113,12 +113,24 @@
       [(and (data? s*) (fx= (data-idx s*) xi)) '()]
       [else s*])))
 
+(define t:aux:depth
+  (lambda (s*)
+    (cond
+      [(node? s*)
+       (fx+ 1 (max (t:aux:depth (node-e s*)) (t:aux:depth (node-o s*))))
+       ;(fx+ 1 (t:aux:depth (node-e s*)))
+       ]
+      [(data? s*) 1]
+      [else 0])))
+
 
 ; Substitution representation
 
 (define empty-subst-map '())
 
 (define subst-map-length t:size)
+
+(define subst-map-depth t:aux:depth)
 
 ; Returns #f if not found, or a pair of u and the result of the lookup.
 ; This distinguishes between #f indicating absence and being the result.
@@ -134,7 +146,6 @@
 
 (define subst-map-eq? eq?)
 
-
 ; Alternative (unused) substitution representation, using alists.
 ; Performance with the tries is usually about the same and
 ; can be much better for huge substitutions.
@@ -143,6 +154,7 @@
 (define empty-subst-map '())
 
 (define subst-map-length length)
+
 
 ; Returns #f if not found, or a pair of u and the result of the lookup.
 ; This distinguishes between #f indicating absence and being the result.
