@@ -217,6 +217,7 @@
 (define-record-type constraints (fields =/= absent =/=*))
 (define-record-type var-attr (fields cxs goal-dependents goal-dependencies))
 (define-record-type estate (fields vs goals goals-demanded))
+; TODO: can we do without tracking demanded goals in estate via continuations, like we can with ready goals?
 
 (define estate-empty
   (make-estate))
