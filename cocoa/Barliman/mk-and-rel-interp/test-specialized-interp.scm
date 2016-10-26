@@ -188,7 +188,7 @@
 ;;   evaluation: a variable may be the term, env, or result
 ;;     as the result, a variable provides information that flows backwards
 
-(define-record-type goal-parse (fields term penv))
+;(define-record-type goal-parse (fields term penv))
 ;(define-record-type goal-parse-operator (fields op penv))
 ;(define-record-type goal-parse-parameters (fields params penv))
 ;(define-record-type goal-parse-letrec-bindings (fields bindings penv))
@@ -201,14 +201,15 @@
 ;; #f for numbers, symbols, pairs if fully negated
 
 ;; negated domains for [un]known types
-(define-record-type domain-unknown-=/= (fields nil? t? f? numbers symbols pairs applicables))
-(define-record-type domain-term-=/= (fields nil? t? f? numbers symbols pairs))
-(define-record-type domain-operator-=/= (fields symbols pairs))
-(define-record-type domain-params-=/= (fields symbols symbol-lists))
-(define-record-type domain-env-=/= (fields envs))
-(define-record-type domain-applicable-=/= (fields applicables))
-(define-record-type domain-number-=/= (fields numbers))
-(define-record-type domain-symbol-=/= (fields symbols))
+(define-record-type domain-unknown (fields nil? t? f? number? symbol? pair? applicable?))
+;(define-record-type domain-term-=/= (fields nil? t? f? numbers symbols pairs))
+;(define-record-type domain-operator-=/= (fields symbols pairs))
+;(define-record-type domain-params-=/= (fields symbols symbol-lists))
+;(define-record-type domain-env-=/= (fields envs))
+;(define-record-type domain-applicable-=/= (fields applicables))
+;(define-record-type domain-number-=/= (fields numbers))
+;(define-record-type domain-symbol-=/= (fields symbols))
+; replace with domain tags for: number, symbol, applicable, env, params, operator
 
 (define-record-type constraints (fields domain vars-=/= absent =/=*))
 (define-record-type vattr (fields cxs goal-dependents goal-dependencies))
@@ -219,13 +220,30 @@
 (define vattr-empty (make-vattr constraints-empty '() '()))
 (define estate-empty (make-estate empty-subst-map empty-subst-map))
 
-;TODO: ==, =/=, absento, symbolo, numbero, applicableo, envo, paramso, termo, operatoro, parse-termo, eval-termo
+;TODO: ==, =/=, absento, symbolo, numbero, applicableo, not-applicableo, envo, paramso, termo, operatoro, parse-termo, eval-termo
 
 (define (eval-in-envo term env val)
-  (define
+  (define (eval-termo term env val)
+    (define (try size)
+      (lambda (st)
+        (mproject0 term  ; TODO: implicitly creates lambda (size) (st)?
+          (1 (? symbol?) ) ; TODO: lookup
+          (1 (? number?) )
+          (1 #t )
+          (1 #f )
+          (1 `(,(? operator? ,op) . ,rands)
+           (mproject0 (- size 1) (op . rands)
+             (0 `(quote ,(? not-applicable?)))
+             ; TODO: need to apply sizes to (? term?) patterns, somehow?
+             (0 `((? term?) . (? list of term?)))
+             (1 `(if ,(? term?) ,(? term?) ,(? term?)))
+             (1 `(lambda ,(? params?) ,(? term?)))
+             (1 `(letrec ,(? letrecparams?) ,(? term?))
 
-    )
-  (lambda (st)
+              ))))))
+    (try 0))
+
+  (lambda (mk-st)
     ;; TODO: import mk constraints
 
     ;; build initial state with initial eval goal ready-demanded
