@@ -249,7 +249,8 @@
               (let ((op (eval-term op env))
                     (a* (eval-term-list rands env)))
                 (match-cdfs op
-                  (0 `(,prim-tag . ,prim-id))
+                   ; TODO: eval-prim
+                  (0 `(,prim-tag . ,prim-id) (eval-prim prim-id a*))
                   (0 `(,closure-tag . (lambda ,x ,body) ,env^)
                    (let ((res (match-cws x
                                 (0 10 params (extend-env* params a* env^))
