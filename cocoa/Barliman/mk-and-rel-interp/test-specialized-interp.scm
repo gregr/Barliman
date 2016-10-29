@@ -230,18 +230,18 @@
   (define (eval-termo term env val)
     (
      (
-        (match-cdfs-tagged `(eval-termo ,term ,env ,val) term  ; TODO: implicitly creates lambda (size) (st)?
+        (
+         (let ((not-bound? (lambda (sym) (not-in-env? env sym)))
+               (bound? (lambda (sym) (in-env? env sym))))
+         (match-cdfs-tagged `(eval-termo ,term ,env ,val) term  ; TODO: implicitly creates lambda (size) (st)?
           (1 #t #t)
           (1 #f #f)
           (1 (? number? num) num)
           (1 `(quote ,(? quotable? datum)) (not-in-envo 'quote env) datum)
           (1 (? symbol? sym) (lookup env sym))
-          (1 (and `(,(? operator?) . ,_) operation)
+          (1 (and `(,(? operator? op) . ,_) operation)
            (match-cws operation
-             ; TODO: these are OK with deterministic independence analysis (op alone determines branch; rands rule out some branches) and 'concurrent' pattern matching (look for all relevant instantiatedness before deciding to suspend), compiling an efficient decision tree
-             ;   but all this isn't even necessary, right? could just blindly try each, and fail mismatches
-             ;     difference from mk proper is that immediately failing a branch can be free (immediately try the next one until success or total failure; this is safe if pattern matching must be finite)
-             (0 10 `(,(? term? op) . ,rands)  ; rands is (? list of dtermo) but that's not a pattern
+             (0 10 `(,(or (not (? symbol?)) (? bound?)) . ,rands)
               (let ((op (eval-term op env))
                     (a* (eval-term-list rands env)))
                 (match-cdfs op
@@ -252,18 +252,16 @@
                                 (0 1 (? symbol? sym)
                                  `((,x . (val . ,a*)) . ,env^)))))
                      (eval-term body res))))))
-             (1 10 `(if ,(? term? condition)
+             (1 10 `((and 'if (? not-bound?)) ,(? term? condition)
                       ,(? term? alt-true)
                       ,(? term? alt-false))
-              (not-in-env 'if env)
               )
-             (1 1 `(lambda ,(? param-list? params) ,(? dtermo body))
-              (not-in-env 'lambda env)
-              )
+             (1 1 `(lambda ,(? params? params) ,(? term? body))
+              `(,closure-tag (lambda ,params ,body) ,env))
+
              (1 1 `(letrec ,(? letrec-binding-list? bindings) ,(? term? body))
-              (not-in-env 'letrec env)
               ))
-           ))))
+           ))))))
     )
 
   (lambda (mk-st)
