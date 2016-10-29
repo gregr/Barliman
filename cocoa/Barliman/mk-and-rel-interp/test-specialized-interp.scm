@@ -220,28 +220,51 @@
 (define vattr-empty (make-vattr constraints-empty '() '()))
 (define estate-empty (make-estate empty-subst-map empty-subst-map))
 
+; d prefixes?
 ;TODO: ==, =/=, absento, symbolo, numbero, applicableo, not-applicableo, envo, paramso, termo, operatoro, parse-termo, eval-termo
+; quotableo === not-applicableo
+; d==, dmatche, dmatche-ws, dmatche-dfs, dlet and dfresh maybe?
 
 (define (eval-in-envo term env val)
+  ;; TODO: start with denvo
   (define (eval-termo term env val)
-    (define (try size)
-      (lambda (st)
-        (mproject0 term  ; TODO: implicitly creates lambda (size) (st)?
-          (1 (? symbol?) ) ; TODO: lookup
-          (1 (? number?) )
-          (1 #t )
-          (1 #f )
-          (1 `(,(? operator? ,op) . ,rands)
-           (mproject0 (- size 1) (op . rands)
-             (0 `(quote ,(? not-applicable?)))
-             ; TODO: need to apply sizes to (? term?) patterns, somehow?
-             (0 `((? term?) . (? list of term?)))
-             (1 `(if ,(? term?) ,(? term?) ,(? term?)))
-             (1 `(lambda ,(? params?) ,(? term?)))
-             (1 `(letrec ,(? letrecparams?) ,(? term?))
-
-              ))))))
-    (try 0))
+    (
+     (
+        (match-cdfs-tagged `(eval-termo ,term ,env ,val) term  ; TODO: implicitly creates lambda (size) (st)?
+          (1 #t #t)
+          (1 #f #f)
+          (1 (? number? num) num)
+          (1 `(quote ,(? quotable? datum)) (not-in-envo 'quote env) datum)
+          (1 (? symbol? sym) (lookup env sym))
+          (1 (and `(,(? operator?) . ,_) operation)
+           (match-cws operation
+             ; TODO: these are OK with deterministic independence analysis (op alone determines branch; rands rule out some branches) and 'concurrent' pattern matching (look for all relevant instantiatedness before deciding to suspend), compiling an efficient decision tree
+             ;   but all this isn't even necessary, right? could just blindly try each, and fail mismatches
+             ;     difference from mk proper is that immediately failing a branch can be free (immediately try the next one until success or total failure; this is safe if pattern matching must be finite)
+             (0 10 `(,(? term? op) . ,rands)  ; rands is (? list of dtermo) but that's not a pattern
+              (let ((op (eval-term op env))
+                    (a* (eval-term-list rands env)))
+                (match-cdfs op
+                  (0 `(,prim-tag . ,prim-id))
+                  (0 `(,closure-tag . (lambda ,x ,body) ,env^)
+                   (let ((res (match-cws x
+                                (0 10 params (extend-env* params a* env^))
+                                (0 1 (? symbol? sym)
+                                 `((,x . (val . ,a*)) . ,env^)))))
+                     (eval-term body res))))))
+             (1 10 `(if ,(? term? condition)
+                      ,(? term? alt-true)
+                      ,(? term? alt-false))
+              (not-in-env 'if env)
+              )
+             (1 1 `(lambda ,(? param-list? params) ,(? dtermo body))
+              (not-in-env 'lambda env)
+              )
+             (1 1 `(letrec ,(? letrec-binding-list? bindings) ,(? term? body))
+              (not-in-env 'letrec env)
+              ))
+           ))))
+    )
 
   (lambda (mk-st)
     ;; TODO: import mk constraints
