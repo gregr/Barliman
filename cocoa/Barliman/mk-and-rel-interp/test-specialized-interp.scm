@@ -228,11 +228,54 @@
 ; can we really support negated patterns like (not (? symbol?))? how about (not (? bound?)) instead of using not-bound?
 ; does each pattern have to explicitly include negations of earlier patterns? hopefully not
 
+; given: closure-tag, prim-tag
+; primitives: equal?, symbol?, number?, not
+; syntax: lambda, let, letrec, if, and, or, match, match-dfs, match-ws, match-cdfs, match-cws, tagged
+
 (letrec
-  ((eval-term
+  ((applicable-tag? (lambda (v)
+                      (or (equal? closure-tag v) (equal? prim-tag v))))
+   (quotable? (lambda (v)
+                (match v
+                  ((? symbol?) (not (applicable-tag? v)))
+                  (`(,a . ,d) (and (quotable? a) (quotable? d)))
+                  (_ #t))))
+   (term? (lambda (v) (match v ('() #f) (v (quotable? v)))))
+   (operator? (lambda (v) (match v (#t #f) (#f #f) (v (term? v)))))
+   (in-env? (lambda (env sym)
+              (match-dfs env
+                ('() #f)
+                (`(,a . ,d) (or (equal? a sym) (in-env? d sym))))))
+   (not-in-params? (lambda (ps sym)
+                     (match-dfs ps
+                       ('() #t)
+                       (`(,a . ,d)
+                         (and (not (equal? a sym)) (not-in-params? d sym))))))
+   (param-list? (lambda (x)
+                  (match-dfs x
+                    ('() #t)
+                    (`(,(? symbol? a) . ,d)
+                      (and (params? d) (not-in-params? d a)))
+                    (_ #f))))
+   (params? (lambda (x)
+              (match-ws x
+                (10 (? param-list?) #t)
+                (1 x (symbol? x)))))
+   (eval-prim
+     (lambda (prim-id args)
+       (match `(,prim-id . ,args)
+         (`(cons ,a ,d) `(,a . ,d))
+         (`(car (,(and (not (? applicable-tag?)) a) . ,d)) a)
+         (`(cdr (,(and (not (? applicable-tag?)) a) . ,d)) d)
+         (`(null? ,v) (match v ('() #t) (_ #f)))
+         (`(pair? ,v) (match v (`(,(not (? applicable-tag?)) . ,_) #t) (_ #f)))
+         (`(symbol? ,v) (symbol? v))
+         (`(number? ,v) (number? v))
+         (`(not ,v) (match v (#f #t) (_ #f)))
+         (`(equal? ,v1 ,v2) (equal? v1 v2)))))
+   (eval-term
      (lambda (term env)
-       (let ((not-bound? (lambda (sym) (not-in-env? env sym)))
-             (bound? (lambda (sym) (in-env? env sym))))
+       (let ((bound? (lambda (sym) (in-env? env sym))))
          (tagged `(eval-term ,term ,env)
            (match-cdfs term
              (1 #t #t)
@@ -265,11 +308,9 @@
                  (1 1 `(letrec ((,p-name . (rec . (lambda ,x ,body))))
                          ,(? term? body))
                   (eval-term
-                    body `((,p-name . (rec . (lambda ,x ,body))) . ,env))))))))))
-   (eval-prim
-     (lambda (prim-id args)
-       ; TODO: transcribe
-       )))
+                    body `((,p-name . (rec . (lambda ,x ,body))) . ,env)))))))))))
+
+  ; TODO: main entry into eval-term ...
 
   )
 
