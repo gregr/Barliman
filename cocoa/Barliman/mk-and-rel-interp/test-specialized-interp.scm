@@ -220,17 +220,28 @@
 (define vattr-empty (make-vattr constraints-empty '() '()))
 (define estate-empty (make-estate empty-subst-map empty-subst-map))
 
-; d prefixes?
 ;TODO: ==, =/=, absento, symbolo, numbero, applicableo, not-applicableo, envo, paramso, termo, operatoro, parse-termo, eval-termo
 ; quotableo === not-applicableo
-; d==, dmatche, dmatche-ws, dmatche-dfs, dlet and dfresh maybe?
 ;
 ; can we really support negated patterns like (not (? symbol?))? how about (not (? bound?)) instead of using not-bound?
 ; does each pattern have to explicitly include negations of earlier patterns? hopefully not
 
-; given: closure-tag, prim-tag
-; primitives: equal?, symbol?, number?, not
+; primitives: equal?, symbol?, number?
 ; syntax: lambda, let, letrec, if, and, or, match, match-dfs, match-ws, match-cdfs, match-cws, tagged
+
+(let ((closure-tag (gensym "#%closure"))
+      (prim-tag (gensym "#%primitive"))
+      (empty-env '())
+      (initial-env `((cons . (val . (,prim-tag . cons)))
+                     (car . (val . (,prim-tag . car)))
+                     (cdr . (val . (,prim-tag . cdr)))
+                     (null? . (val . (,prim-tag . null?)))
+                     (pair? . (val . (,prim-tag . pair?)))
+                     (symbol? . (val . (,prim-tag . symbol?)))
+                     (not . (val . (,prim-tag . not)))
+                     (equal? . (val . (,prim-tag . equal?)))
+                     (list . (val . (,closure-tag (lambda x x) ,empty-env)))
+                     . ,empty-env)))
 
 (letrec
   ((applicable-tag? (lambda (v)
@@ -313,6 +324,9 @@
   ; TODO: main entry into eval-term ...
 
   )
+
+
+)
 
 
 (define (eval-in-envo term env val)
