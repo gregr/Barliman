@@ -227,7 +227,7 @@
 ; does each pattern have to explicitly include negations of earlier patterns? hopefully not
 
 ; primitives: equal?, symbol?, number?
-; syntax: lambda, let, letrec, if, and, or, match, match-dfs, match-ws, match-cdfs, match-cws, tagged
+; syntax: lambda, let, letrec, if, and, or, match, match-dfs, match-ws, match-c, match-cdfs, match-cws, tagged
 
 (let ((closure-tag (gensym "#%closure"))
       (prim-tag (gensym "#%primitive"))
@@ -254,24 +254,37 @@
    (term? (lambda (v) (match v ('() #f) (v (quotable? v)))))
    (operator? (lambda (v) (match v (#t #f) (#f #f) (v (term? v)))))
    (in-env? (lambda (env sym)
-              (match-dfs env
+              (match env
                 ('() #f)
                 (`(,a . ,d) (or (equal? a sym) (in-env? d sym))))))
    (not-in-params? (lambda (ps sym)
-                     (match-dfs ps
+                     (match ps
                        ('() #t)
                        (`(,a . ,d)
                          (and (not (equal? a sym)) (not-in-params? d sym))))))
    (param-list? (lambda (x)
-                  (match-dfs x
+                  (match x
                     ('() #t)
                     (`(,(? symbol? a) . ,d)
-                      (and (params? d) (not-in-params? d a)))
+                      (and (param-list? d) (not-in-params? d a)))
                     (_ #f))))
    (params? (lambda (x)
               (match-ws x
                 (10 (? param-list?) #t)
                 (1 x (symbol? x)))))
+   (extend-env* (lambda (params args env)
+                  (match `(,params . ,args)
+                    (`(() . ()) env)
+                    (`((,x . ,dx*) . (,a . ,da*))
+                      (extend-env* dx* da* `((,x . (val . ,a)) . ,env))))))
+   (lookup (lambda (env sym)
+             (match env
+               (`((,y . ,b) . ,rest)
+                 (if (equal? sym y)
+                   (match b
+                     (`(val . ,v) v)
+                     (`(rec . ,lam-expr) `(,closure-tag ,lam-expr ,env)))
+                   (lookup rest sym))))))
    (eval-prim
      (lambda (prim-id args)
        (match `(,prim-id . ,args)
@@ -284,11 +297,17 @@
          (`(number? ,v) (number? v))
          (`(not ,v) (match v (#f #t) (_ #f)))
          (`(equal? ,v1 ,v2) (equal? v1 v2)))))
+   (eval-term-list
+     (lambda (terms env)
+       (match terms
+         ('() '())
+         (`(,term . ,terms)
+           `(,(eval-term term env) . ,(eval-term-list terms env))))))
    (eval-term
      (lambda (term env)
        (let ((bound? (lambda (sym) (in-env? env sym))))
          (tagged `(eval-term ,term ,env)
-           (match-cdfs term
+           (match-c term
              (1 #t #t)
              (1 #f #f)
              (1 (? number? num) num)
@@ -300,7 +319,7 @@
                                              (? bound?))) . ,rands)
                  (let ((op (eval-term op env))
                        (a* (eval-term-list rands env)))
-                   (match-cdfs op
+                   (match-c op
                      (0 `(,prim-tag . ,prim-id) (eval-prim prim-id a*))
                      (0 `(,closure-tag . (lambda ,x ,body) ,env^)
                        (let ((res (match-cws x
@@ -322,6 +341,7 @@
                     body `((,p-name . (rec . (lambda ,x ,body))) . ,env)))))))))))
 
   ; TODO: main entry into eval-term ...
+  ; start with proper-env check
 
   )
 
