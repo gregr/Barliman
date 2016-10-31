@@ -228,47 +228,59 @@
 ; can we really support negated patterns like (not (? symbol?))? how about (not (? bound?)) instead of using not-bound?
 ; does each pattern have to explicitly include negations of earlier patterns? hopefully not
 
+(letrec
+  ((eval-term
+     (lambda (term env)
+       (let ((not-bound? (lambda (sym) (not-in-env? env sym)))
+             (bound? (lambda (sym) (in-env? env sym))))
+         (tagged `(eval-term ,term ,env)
+           (match-cdfs term
+             (1 #t #t)
+             (1 #f #f)
+             (1 (? number? num) num)
+             (1 `((and 'quote (not (? bound?))) ,(? quotable? datum)) datum)
+             (1 (? symbol? sym) (lookup env sym))
+             (1 (and `(,(? operator? op) . ,_) operation)
+               (match-cws operation
+                 (0 10 `(,(and (? term?) (or (not (? symbol?))
+                                             (? bound?))) . ,rands)
+                 (let ((op (eval-term op env))
+                       (a* (eval-term-list rands env)))
+                   (match-cdfs op
+                     (0 `(,prim-tag . ,prim-id) (eval-prim prim-id a*))
+                     (0 `(,closure-tag . (lambda ,x ,body) ,env^)
+                       (let ((res (match-cws x
+                                    (0 10 params (extend-env* params a* env^))
+                                    (0 1 (? symbol? sym)
+                                      `((,x . (val . ,a*)) . ,env^)))))
+                         (eval-term body res))))))
+                 (1 10 `(if ,(? term? condition)
+                          ,(? term? alt-true)
+                          ,(? term? alt-false))
+                  (if (eval-term condition env)
+                    (eval-term alt-true env)
+                    (eval-term alt-false env)))
+                 (1 1 `(lambda ,(? params? params) ,(? term? body))
+                  `(,closure-tag (lambda ,params ,body) ,env))
+                 (1 1 `(letrec ((,p-name . (rec . (lambda ,x ,body))))
+                         ,(? term? body))
+                  (eval-term
+                    body `((,p-name . (rec . (lambda ,x ,body))) . ,env))))))))))
+   (eval-prim
+     (lambda (prim-id args)
+       ; TODO: transcribe
+       )))
+
+  )
+
+
 (define (eval-in-envo term env val)
   ;; TODO: start with denvo
   (define (eval-termo term env val)
     (
      (
         (
-         (let ((not-bound? (lambda (sym) (not-in-env? env sym)))
-               (bound? (lambda (sym) (in-env? env sym))))
-         (match-cdfs-tagged `(eval-termo ,term ,env ,val) term
-          (1 #t #t)
-          (1 #f #f)
-          (1 (? number? num) num)
-          (1 `((and 'quote (not (? bound?))) ,(? quotable? datum)) datum)
-          (1 (? symbol? sym) (lookup env sym))
-          (1 (and `(,(? operator? op) . ,_) operation)
-           (match-cws operation
-             (0 10 `(,(and (? term?) (or (not (? symbol?))
-                                         (? bound?))) . ,rands)
-              (let ((op (eval-term op env))
-                    (a* (eval-term-list rands env)))
-                (match-cdfs op
-                   ; TODO: eval-prim
-                  (0 `(,prim-tag . ,prim-id) (eval-prim prim-id a*))
-                  (0 `(,closure-tag . (lambda ,x ,body) ,env^)
-                   (let ((res (match-cws x
-                                (0 10 params (extend-env* params a* env^))
-                                (0 1 (? symbol? sym)
-                                 `((,x . (val . ,a*)) . ,env^)))))
-                     (eval-term body res))))))
-             (1 10 `(if ,(? term? condition)
-                      ,(? term? alt-true)
-                      ,(? term? alt-false))
-              (if (eval-term condition env)
-                (eval-term alt-true env)
-                (eval-term alt-false env)))
-             (1 1 `(lambda ,(? params? params) ,(? term? body))
-              `(,closure-tag (lambda ,params ,body) ,env))
-             (1 1 `(letrec ((,p-name . (rec . (lambda ,x ,body))))
-                     ,(? term? body))
-              (eval-term
-                body `((,p-name . (rec . (lambda ,x ,body))) . ,env))))))))))
+         )))
     )
 
   (lambda (mk-st)
