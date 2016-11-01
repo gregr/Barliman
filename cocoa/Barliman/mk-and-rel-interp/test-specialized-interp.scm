@@ -251,12 +251,6 @@
                   ((? symbol?) (not (applicable-tag? v)))
                   (`(,a . ,d) (and (quotable? a) (quotable? d)))
                   (_ #t))))
-   ; TODO: term? should instead validate syntax and variable lookups (need env)
-   (term? (lambda (v) (match v ('() #f) (v (quotable? v)))))
-   (in-env? (lambda (env sym)
-              (match env
-                ('() #f)
-                (`(,a . ,d) (or (equal? a sym) (in-env? d sym))))))
    (not-in-params? (lambda (ps sym)
                      (match ps
                        ('() #t)
@@ -272,6 +266,10 @@
               (match-ws x
                 (10 (? param-list?) #t)
                 (1 x (symbol? x)))))
+   (in-env? (lambda (env sym)
+              (match env
+                ('() #f)
+                (`(,a . ,d) (or (equal? a sym) (in-env? d sym))))))
    (extend-env* (lambda (params args env)
                   (match `(,params . ,args)
                     (`(() . ()) env)
@@ -285,6 +283,35 @@
                      (`(val . ,v) v)
                      (`(rec . ,lam-expr) `(,closure-tag ,lam-expr ,env)))
                    (lookup rest sym))))))
+   (term?
+     (lambda (term env)
+       (let ((term1? (lambda (v) (term? v env)))
+             (terms? (lambda (ts env)
+                       (match ts
+                         ('() #t)
+                         (`(,t . ,ts) (and (term? t env) (terms? ts env)))))))
+         (match term
+           (#t #t)
+           (#f #t)
+           ((? number?) #t)
+           ((and (? symbol? sym)) (in-env? env sym))
+           (`(,(? term1?) . ,rands) (terms? rands env))
+           (`(quote ,datum) (quotable? datum))
+           (`(if ,c ,t ,f) (and (term1? c) (term1? t) (term1? f)))
+           (`(lambda ,params ,body)
+             (and (params? params)
+                  (let ((res (match params
+                               ((not (? symbol? params))
+                                (extend-env* params params env^))
+                               (sym `((,x . (val . ,x)) . ,env^)))))
+                    (term? body res))))
+           (`(letrec ((,p-name (lambda ,params ,body)))
+               ,letrec-body)
+             (and (params? params)
+                  (let ((res `((,p-name . (rec . (lambda ,params ,body)))
+                               . ,env)))
+                    (and (term? body res) (term? letrec-body res)))))
+           (_ #f)))))
    (eval-prim
      (lambda (prim-id args)
        (match `(,prim-id . ,args)
@@ -305,7 +332,8 @@
            `(,(eval-term term env) . ,(eval-term-list terms env))))))
    (eval-term
      (lambda (term env)
-       (let ((bound? (lambda (sym) (in-env? env sym))))
+       (let ((bound? (lambda (sym) (in-env? env sym)))
+             (term1? (lambda (v) (term? v env))))
          (tagged `(eval-term ,term ,env)
            (match-cdfs term
              (1 #t #t)
@@ -316,29 +344,27 @@
              (1 (and `(,op . ,_) operation)
                (match-cws operation
                  (0 10 `(,(or (? bound?) (not (? symbol?))) . ,rands)
-                 (let ((op (eval-term op env))
-                       (a* (eval-term-list rands env)))
-                   (match-c op
-                     (0 `(,prim-tag . ,prim-id) (eval-prim prim-id a*))
-                     (0 `(,closure-tag (lambda ,x ,body) ,env^)
+                  (let ((op (eval-term op env))
+                        (a* (eval-term-list rands env)))
+                    (match-c op
+                      (0 `(,prim-tag . ,prim-id) (eval-prim prim-id a*))
+                      (0 `(,closure-tag (lambda ,x ,body) ,env^)
                        (let ((res (match-cws x
-                                    (0 10 params (extend-env* params a* env^))
-                                    (0 1 (? symbol? sym)
-                                      `((,x . (val . ,a*)) . ,env^)))))
+                                    (0 10 (not (? symbol? params))
+                                     (extend-env* params a* env^))
+                                    (0 1 sym `((,x . (val . ,a*)) . ,env^)))))
                          (eval-term body res))))))
                  (1 10 `(if ,condition ,alt-true ,alt-false)
                   (if (eval-term condition env)
                     (eval-term alt-true env)
                     (eval-term alt-false env)))
-                 (1 1 `(lambda ,(? params? params) ,(? term? body))
+                 (1 1 (? term1? `(lambda ,params ,body))
                   `(,closure-tag (lambda ,params ,body) ,env))
-                 (1 1 `(letrec ((,p-name (lambda ,(? params? params)
-                                           ,(? term? body))))
-                         ,letrec-body)
+                 (1 1 (? term1? `(letrec ((,p-name (lambda ,params ,body)))
+                                   ,letrec-body))
                   (eval-term
-                    letrec-body
-                    `((,p-name . (rec . (lambda ,params ,body)))
-                      . ,env)))))))))))
+                    letrec-body `((,p-name . (rec . (lambda ,params ,body)))
+                                  . ,env)))))))))))
 
   ; TODO: main entry into eval-term ...
   ; start with proper-env check
