@@ -393,6 +393,20 @@
     ;; TODO: export mk constraints for each answer state produced
     ))
 
+; deterministic evaluation benchmark ideas to measure sources of overhead
+; across programs: append, reverse, map, fold, mini interpreter, remove-foo, etc.
+; across program implementations: tailcall, w/ fold, etc.
+; across runtimes:
+;   scheme, mk-only, mixed
+; across interpreter architectures:
+;   immediate (scheme only)
+;   eval at runtime (scheme only)
+;   closure encoding (mk would need to support procedure values)
+;   de bruin encoding (with and without integer support)
+;   raw interpretation
+;   original relational interpreter(s) (mk only)
+
+
 (define (evalo expr val)
   (eval-expo expr initial-env val))
 
